@@ -5,7 +5,7 @@ import queue
 import time
 from collections import deque
 from MidiTools.midi_player import MidiPlayer
-from Chords.chords_analyser import ChordAnalyser
+from MusicUtils.chords_analyser import ChordAnalyser
 
 class MidiReader:
     def __init__(self, device_id):
