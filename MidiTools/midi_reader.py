@@ -6,6 +6,12 @@ import time
 from collections import deque
 from MidiTools.midi_player import MidiPlayer
 from MusicUtils.chords_analyser import ChordAnalyser
+from MusicUtils.chords_generator import ChordDictionnary, ChordDictionnaryGenerator
+
+# Générer le dictionnaire des accords une seule fois
+chord_dictionnary = ChordDictionnary()
+generator = ChordDictionnaryGenerator(chord_dictionnary)
+
 
 class MidiReader:
     def __init__(self, device_id):
@@ -16,11 +22,13 @@ class MidiReader:
         self.running = False
         self.midi_input = None
         self.thread = None
-        self.event_queue = queue.Queue()  # Queue to pass MIDI events to player
+        self.event_queue = queue.Queue()
         self.player = MidiPlayer(self.event_queue)
-        self.note_fifo = deque(maxlen=12)  # FIFO for last 12 completed notes
-        self.active_notes = {}  # Tracks currently pressed notes with timestamps
-        self.chords = []  # List of detected chords (optional history)
+        self.note_fifo = deque(maxlen=12)
+        self.active_notes = {}
+        self.chords = []
+        self.last_note_time = 0
+        self.current_chord = None  # Stocke l'accord en cours
         self.start()
 
     def start(self):
@@ -40,6 +48,7 @@ class MidiReader:
     def _read_midi(self):
         """Read MIDI events, manage FIFO and detect chords."""
         SIMULTANEITY_THRESHOLD = 200  # ms window for chord detection
+        CHORD_STABILIZATION_DELAY = 0.3  # seconds to wait after last note
         while self.running:
             if self.midi_input.poll():
                 midi_events = self.midi_input.read(10)
@@ -47,33 +56,36 @@ class MidiReader:
                     status, note, velocity, _ = event[0]
                     timestamp = event[1]
 
-                    # Handle MIDI events
                     if status & 0xF0 == 0x90 and velocity > 0:  # Note On
                         self.event_queue.put(("note_on", note, velocity))
-                        self.active_notes[note] = timestamp  # Track note with timestamp
-                        self._check_for_chord(timestamp, SIMULTANEITY_THRESHOLD)
+                        self.active_notes[note] = timestamp
+                        self.last_note_time = time.time()
 
                     elif status & 0x80 or (status & 0xF0 == 0x90 and velocity == 0):  # Note Off
                         self.event_queue.put(("note_off", note, 0))
                         if note in self.active_notes:
-                            # Add to FIFO only when note is fully played (ON -> OFF)
                             self.note_fifo.append(note)
                             print(f"Last 12 notes played: {list(self.note_fifo)}")
-                            del self.active_notes[note]  # Remove from active notes
+                            del self.active_notes[note]
+                            # Réinitialise l'accord en cours si toutes les notes sont relâchées
+                            if not self.active_notes:
+                                self.current_chord = None
+
+            # Detect chord if stabilized and not yet detected
+            current_time = time.time()
+            current_size = len(self.active_notes)
+            if (self.active_notes and 
+                current_size >= 3 and 
+                (current_time - self.last_note_time) > CHORD_STABILIZATION_DELAY and 
+                self.current_chord is None):
+                active_timestamps = list(self.active_notes.values())
+                if max(active_timestamps) - min(active_timestamps) <= SIMULTANEITY_THRESHOLD:
+                    keysList = sorted(self.active_notes.keys())
+                    self.chords.append(keysList)
+                    chord = ChordAnalyser.analyse(keysList, chord_dictionnary)
+                    #self.current_chord = tuple(chord)  # Stocke comme tuple
 
             time.sleep(0.01)
-
-    def _check_for_chord(self, current_timestamp, threshold):
-        """Detect if 3-9 notes are played quasi-simultaneously."""
-        active_timestamps = list(self.active_notes.values())
-        if len(active_timestamps) >= 3:  # At least 3 notes to consider a chord
-            # Check if all active notes are within the threshold
-            min_time = min(active_timestamps)
-            max_time = max(active_timestamps)
-            if max_time - min_time <= threshold and 3 <= len(self.active_notes) <= 9:
-                chord = sorted(self.active_notes.keys())  # Sort for consistent display
-                self.chords.append(chord)  # Keep history (optional)
-                ChordAnalyser(chord)  # Create ChordAnalyser instance
 
     def stop(self):
         """Stop the MIDI reader and player."""
