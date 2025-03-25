@@ -6,11 +6,9 @@ import time
 from collections import deque
 from MidiTools.midi_player import MidiPlayer
 from MusicUtils.chords_analyser import ChordAnalyser
-from MusicUtils.chords_generator import ChordDictionnary, ChordDictionnaryGenerator
 
-# Générer le dictionnaire des accords une seule fois
-chord_dictionnary = ChordDictionnary()
-generator = ChordDictionnaryGenerator(chord_dictionnary)
+
+
 
 
 class MidiReader:

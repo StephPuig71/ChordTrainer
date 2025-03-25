@@ -6,14 +6,13 @@ ctk.set_appearance_mode("dark")  # Options : "light", "dark", "system"
 ctk.set_default_color_theme("blue")  # Options : "blue", "green", "dark-blue"
 
 class MainWindow:
-    def __init__(self, root, _chord_dictionnary, _generator):
+    def __init__(self, root, _chord_dictionnary):
         self.root = root
         self.root.title("ChordTrainer")
         self.root.attributes('-fullscreen', True)  # Plein écran
 
         # Générer le dictionnaire des accords
         self.chord_dictionnary = _chord_dictionnary
-        generator = _generator
 
         # Créer un frame pour centrer les boutons
         self.frame = ctk.CTkFrame(master=self.root)

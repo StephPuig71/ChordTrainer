@@ -2,14 +2,16 @@
 import customtkinter as ctk
 import random
 from MusicUtils.chords_analyser import ChordAnalyser
+from MidiTools.midi_reader import MidiReader
 
 class TrainerWindow:
-    def __init__(self, root, chord_dictionnary, mode):
+    def __init__(self, root, _chord_dictionnary):
         self.root = root
         self.root.title("ChordTrainer - Trainer")
         self.root.attributes('-fullscreen', True)
-        self.chord_dictionnary = chord_dictionnary
-        self.mode = mode  # "Chords" ou "Song"
+        self.chord_dictionnary = _chord_dictionnary
+        self.mode = "Chords"  # "Chords" ou "Song"
+        self.midi_reader = MidiReader()  # Instance de MidiReader
 
         # Paramètres en dur pour le développement
         self.level = 1  # Niveau 1 pour les accords
@@ -19,12 +21,16 @@ class TrainerWindow:
         self.chord_queue = []
         self.current_chord_index = 0  # Index de l'accord actuel
         self.played_chords = []  # Liste des résultats (True/False) pour les accords joués
+        self.current_notes = []  # Notes MIDI actuellement jouées
 
         # Charger les accords selon le mode
         self.load_chords()
 
         # Configurer les zones horizontales
         self.setup_ui()
+
+        # Lancer la lecture MIDI
+        self.read_midi()
 
     def load_chords(self):
         if self.mode == "Chords":
@@ -55,13 +61,9 @@ class TrainerWindow:
         # Zone 1 : File des accords
         self.zone1 = ctk.CTkFrame(master=self.root, height=zone_height)
         self.zone1.pack(fill="x", expand=False)
-        self.zone1_label = ctk.CTkLabel(
-            master=self.zone1,
-            text="",
-            font=("Arial", 30),
-            anchor="center"
-        )
-        self.zone1_label.pack(fill="both", expand=True)
+        self.zone1_labels = []  # Liste de labels pour les accords
+        self.zone1_frame = ctk.CTkFrame(master=self.zone1)
+        self.zone1_frame.pack(fill="both", expand=True)
 
         # Zone 2 : Formule des intervalles
         self.zone2 = ctk.CTkFrame(master=self.root, height=zone_height)
@@ -114,9 +116,48 @@ class TrainerWindow:
         # Mettre à jour l'affichage initial
         self.update_display()
 
+    def read_midi(self):
+        # Vérifier les notes MIDI jouées
+        notes = self.midi_reader.get_notes()
+        if notes:
+            for note, velocity in notes:
+                if velocity > 0:  # Note On
+                    if note not in self.current_notes:
+                        self.current_notes.append(note)
+                else:  # Note Off
+                    if note in self.current_notes:
+                        self.current_notes.remove(note)
+
+            # Identifier l'accord joué
+            if self.current_notes:
+                played_chord = ChordAnalyser.analyse(self.current_notes, self.chord_dictionnary)
+                if played_chord:
+                    self.zone4_label.configure(text=played_chord.ChordDiagramString)
+
+                    # Vérifier si l'accord joué correspond à l'accord demandé
+                    if self.current_chord_index < len(self.chord_queue):
+                        current_chord = self.chord_queue[self.current_chord_index]
+                        if played_chord.noteList == current_chord.noteList:
+                            self.played_chords.append(True)  # Accord correct
+                            self.current_chord_index += 1
+                            self.current_notes = []  # Réinitialiser les notes
+                            self.update_display()
+                        else:
+                            self.played_chords.append(False)  # Accord incorrect
+                            self.current_chord_index += 1
+                            self.current_notes = []
+                            self.update_display()
+
+        # Relancer la lecture toutes les 100 ms
+        self.root.after(100, self.read_midi)
+
     def update_display(self):
         # Zone 1 : Afficher la file des accords
-        display_text = []
+        # Supprimer les anciens labels
+        for label in self.zone1_labels:
+            label.destroy()
+        self.zone1_labels = []
+
         start_index = max(0, self.current_chord_index - 2)  # Commencer 2 accords avant
         end_index = min(len(self.chord_queue), self.current_chord_index + 3)  # Aller jusqu'à 2 accords après
 
@@ -125,15 +166,23 @@ class TrainerWindow:
             if i < self.current_chord_index:
                 # Accord précédent : vert si bien joué, rouge sinon
                 color = "green" if self.played_chords[i] else "red"
-                display_text.append(f"[{chord.shortname}]({color})")
             elif i == self.current_chord_index:
                 # Accord actuel : jaune
-                display_text.append(f"[{chord.shortname}](yellow)")
+                color = "yellow"
             else:
                 # Accords futurs : blanc
-                display_text.append(f"[{chord.shortname}](white)")
+                color = "white"
 
-        self.zone1_label.configure(text="  ".join(display_text))
+            label = ctk.CTkLabel(
+                master=self.zone1_frame,
+                text=chord.shortname,
+                font=("Arial", 30),
+                text_color=color,
+                width=100,
+                anchor="center"
+            )
+            label.pack(side="left", padx=20)
+            self.zone1_labels.append(label)
 
         # Zone 2 : Afficher la formule de l'accord actuel
         if self.current_chord_index < len(self.chord_queue):
@@ -148,5 +197,6 @@ class TrainerWindow:
         else:
             self.zone3_label.configure(text="")
 
-        # Zone 4 : Afficher le diagramme de l'accord joué (à implémenter avec MIDI)
-        self.zone4_label.configure(text="")  # Placeholder pour l'instant
+        # Zone 4 : Afficher le diagramme de l'accord joué (mis à jour dans read_midi)
+        if not self.current_notes:
+            self.zone4_label.configure(text="")
