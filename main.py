@@ -3,6 +3,7 @@ import os
 import customtkinter as ctk
 from TrainerUI.mainWindow import MainWindow
 from MusicUtils.chords_generator import ChordDictionnary, ChordDictionnaryGenerator
+from MidiTools.midi_reader import MidiReader
 
 def main():
     # Définir ALSA_CONFIG_DIR si non défini
@@ -13,6 +14,7 @@ def main():
     root = ctk.CTk()
     app = MainWindow(root)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()

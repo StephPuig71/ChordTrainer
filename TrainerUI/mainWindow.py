@@ -65,7 +65,7 @@ class MainWindow:
 
     def open_trainer(self, mode):
         trainer_window = ctk.CTkToplevel(self.root)
-        trainer_window.attributes('-fullscreen', True)
+        trainer_window.attributes('-fullscreen', False)
         TrainerWindow(trainer_window, self.chord_dictionnary, mode, self.midi_reader)
 
     def open_settings(self):
