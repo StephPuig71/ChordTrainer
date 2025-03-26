@@ -8,9 +8,6 @@ from MidiTools.midi_player import MidiPlayer
 from MusicUtils.chords_analyser import ChordAnalyser
 
 
-
-
-
 class MidiReader:
     def __init__(self, device_id):
         """Initialize MIDI reader and player."""
