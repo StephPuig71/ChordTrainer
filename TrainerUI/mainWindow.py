@@ -11,12 +11,15 @@ class MainWindow:
     def __init__(self, root):
         self.root = root
         self.root.title("ChordTrainer")
-        self.root.attributes('-fullscreen', True)
+        self.root.attributes('-fullscreen', True)  # Mode plein écran
+        print("Initialisation de MainWindow")
 
         self.chord_dictionnary = ChordDictionnary()
         generator = ChordDictionnaryGenerator(self.chord_dictionnary)
-
         self.midi_reader = MidiReader(device_id=3)
+        self.midi_reader.set_chord_dictionnary(self.chord_dictionnary)
+        print("ChordDictionnary et MidiReader initialisés")
+
 
         self.frame = ctk.CTkFrame(master=self.root)
         self.frame.place(relx=0.5, rely=0.5, anchor="center")
@@ -65,9 +68,11 @@ class MainWindow:
 
     def open_trainer(self, mode):
         trainer_window = ctk.CTkToplevel(self.root)
-        trainer_window.attributes('-fullscreen', False)
+        trainer_window.attributes('-fullscreen', True)  # Mode plein écran
+        print(f"Ouverture de TrainerWindow en mode {mode}")
         TrainerWindow(trainer_window, self.chord_dictionnary, mode, self.midi_reader)
-
+        
+            
     def open_settings(self):
         settings_window = ctk.CTkToplevel(self.root)
         settings_window.title("Réglages")

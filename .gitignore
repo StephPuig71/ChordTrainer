@@ -7,3 +7,5 @@ __pycache__/
 *.log
 MidiTools/FluidR3_GM.sf2
 Keyboard Chord Diagram.ttf
+trainerHistory.csv
+projet.txt

@@ -1,7 +1,9 @@
-# trainerUI/trainerWindows.py
 import customtkinter as ctk
 import random
-import tkinter.font as tkfont
+import time
+import os
+import csv
+from datetime import datetime
 from MusicUtils.chords_analyser import ChordAnalyser
 
 class TrainerWindow:
@@ -9,35 +11,42 @@ class TrainerWindow:
         self.root = root
         self.root.title("ChordTrainer - Trainer")
         self.root.attributes('-fullscreen', True)
+        print("Initialisation de TrainerWindow")
         self.chord_dictionnary = chord_dictionnary
         self.mode = mode
         self.midi_reader = midi_reader
+        self.midi_reader.set_chord_dictionnary(chord_dictionnary)
 
-        # Paramètres en dur pour le développement
         self.level = 1
         self.song_file = "./MySongs/test.sng"
-
-        # Liste des accords à jouer
         self.chord_queue = []
         self.current_chord_index = 0
-        self.played_chords = []
+        self.played_chords = [0] * 10
         self.current_notes = []
         self.midi_reader_enabled = False
+        # Ajout pour le chronométrage et le suivi
+        self.start_time = None  # Temps de début pour l’accord actuel
+        self.csv_file = "trainerHistory.csv"
+        self.init_csv()
 
-        # Charger les accords
         self.load_chords()
         print(f"Accords chargés : {[chord.shortname for chord in self.chord_queue]}")
-
-        # Configurer les zones horizontales
         self.setup_ui()
-
-        # Lancer la lecture MIDI
         self.update_midi_reader_enabled(True)
+        print("UI configurée et MIDI activé")
+
+    def init_csv(self):
+        """Initialise le fichier CSV avec les entêtes si nécessaire."""
+        if not os.path.exists(self.csv_file):
+            with open(self.csv_file, mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['timestamp', 'requested_chord', 'time_taken', 'has_error'])
+            print(f"Fichier {self.csv_file} créé avec les entêtes.")
 
     def load_chords(self):
         if self.mode == "Chords":
-            if self.level in self.chord_dictionnary.level:
-                note_lists = self.chord_dictionnary.level[self.level]
+            if self.level in self.chord_dictionnary.levels:
+                note_lists = self.chord_dictionnary.levels[self.level]
                 self.chord_queue = [self.chord_dictionnary.content[note_list] for note_list in random.sample(note_lists, min(10, len(note_lists)))]
         else:
             try:
@@ -56,75 +65,62 @@ class TrainerWindow:
                 print(f"Fichier {self.song_file} non trouvé")
 
     def setup_ui(self):
-        # Charger la police dynamiquement
-        self.keyboard_font = tkfont.Font(file="./Keyboard Chord Diagram.ttf", size=60)
-
-        # Calculer les hauteurs des zones
+        print("Configuration de l'UI")
         screen_height = self.root.winfo_screenheight()
         zone_5_height = int(screen_height * 0.08)
-        remaining_height = screen_height - zone_5_height
-        zone_height = remaining_height // 4
+        zone_height = (screen_height - zone_5_height) // 4
 
-        # Zone 1 : File des accords
-        self.zone1 = ctk.CTkFrame(master=self.root, height=zone_height, fg_color="gray20")
-        self.zone1.pack(fill="x", expand=False)
+        diagram_font_size = int(zone_height * 0.4)
+        text_font_size = int(zone_height * 0.15)
+
+        try:
+            self.keyboard_font = ctk.CTkFont(family="Keyboard Chord Diagram", size=diagram_font_size)
+            print("Police 'Keyboard Chord Diagram' chargée avec succès")
+        except Exception as e:
+            print(f"Erreur lors du chargement de la police 'Keyboard Chord Diagram' : {e}")
+            self.keyboard_font = ctk.CTkFont(family="Arial", size=diagram_font_size)
+            print("Utilisation de la police par défaut 'Arial'")
+
+        self.text_font = ctk.CTkFont(family="Arial", size=text_font_size)
+
+        self.zone1 = ctk.CTkFrame(master=self.root, fg_color="gray20")
+        self.zone1.pack(fill="both", expand=True)
         self.zone1_labels = []
         self.zone1_frame = ctk.CTkFrame(master=self.zone1, fg_color="gray20")
         self.zone1_frame.pack(fill="both", expand=True)
 
-        # Zone 2 : Formule des intervalles
-        self.zone2 = ctk.CTkFrame(master=self.root, height=zone_height, fg_color="gray30")
-        self.zone2.pack(fill="x", expand=False)
+        self.zone2 = ctk.CTkFrame(master=self.root, fg_color="gray30")
+        self.zone2.pack(fill="both", expand=True)
         self.zone2_label = ctk.CTkLabel(
-            master=self.zone2,
-            text="",
-            font=("Arial", 20),
-            anchor="center",
-            text_color="white"
+            master=self.zone2, text="", font=self.text_font, anchor="center", text_color="white"
         )
         self.zone2_label.pack(fill="both", expand=True)
 
-        # Zone 3 : Diagramme de l'accord demandé
-        self.zone3 = ctk.CTkFrame(master=self.root, height=zone_height, fg_color="gray40")
-        self.zone3.pack(fill="x", expand=False)
+        self.zone3 = ctk.CTkFrame(master=self.root, fg_color="gray40")
+        self.zone3.pack(fill="both", expand=True)
         self.zone3_label = ctk.CTkLabel(
-            master=self.zone3,
-            text="",
-            font=self.keyboard_font,
-            anchor="center",
-            text_color="white"
+            master=self.zone3, text="", font=self.keyboard_font, anchor="center", text_color="white"
         )
         self.zone3_label.pack(fill="both", expand=True)
 
-        # Zone 4 : Diagramme de l'accord joué
-        self.zone4 = ctk.CTkFrame(master=self.root, height=zone_height, fg_color="gray50")
-        self.zone4.pack(fill="x", expand=False)
+        self.zone4 = ctk.CTkFrame(master=self.root, fg_color="gray50")
+        self.zone4.pack(fill="both", expand=True)
         self.zone4_label = ctk.CTkLabel(
-            master=self.zone4,
-            text="",
-            font=self.keyboard_font,
-            anchor="center",
-            text_color="white"
+            master=self.zone4, text="", font=self.keyboard_font, anchor="center", text_color="white"
         )
         self.zone4_label.pack(fill="both", expand=True)
 
-        # Zone 5 : Bouton de sortie
         self.zone5 = ctk.CTkFrame(master=self.root, height=zone_5_height, fg_color="gray60")
         self.zone5.pack(fill="x", expand=False)
         self.exit_button = ctk.CTkButton(
-            master=self.zone5,
-            text="Retour",
-            command=self.close,
-            width=200,
-            height=50,
-            font=("Arial", 20),
-            fg_color="red",
-            hover_color="darkred"
+            master=self.zone5, text="Retour", command=self.close, width=200, height=50,
+            font=self.text_font, fg_color="red", hover_color="darkred"
         )
         self.exit_button.pack(pady=10)
 
-        # Mettre à jour l'affichage initial
         self.update_display()
+        self.root.update()
+        print("UI mise à jour")
 
     def close(self):
         self.update_midi_reader_enabled(False)
@@ -138,31 +134,44 @@ class TrainerWindow:
     def update_midi_reader(self):
         if not self.midi_reader_enabled:
             return
-
-        # Utiliser self.midi_reader.active_notes pour les notes actuellement jouées
         self.current_notes = list(self.midi_reader.active_notes.keys())
-
-        # Utiliser self.midi_reader.chords pour les accords détectés
-        if self.midi_reader.chords:
-            # Prendre le dernier accord détecté
-            latest_chord_notes = self.midi_reader.chords[-1]
-            played_chord = ChordAnalyser.analyse(latest_chord_notes, self.chord_dictionnary)
-            if played_chord:
-                self.zone4_label.configure(text=played_chord.ChordDiagramString)
-
-                if self.current_chord_index < len(self.chord_queue):
-                    current_chord = self.chord_queue[self.current_chord_index]
-                    if played_chord.noteList == current_chord.noteList:
-                        self.played_chords.append(True)
-                        self.current_chord_index += 1
-                        self.current_notes = []
-                        self.midi_reader.chords.clear()  # Réinitialiser pour éviter les redétections
-                        self.update_display()
-
+        if self.midi_reader.current_chord:
+            played_chord = self.midi_reader.current_chord
+            print(f"Affichage de l'accord joué : {played_chord.ChordDiagramString}")
+            self.zone4_label.configure(text=played_chord.ChordDiagramString)
+            self.zone4_label.update()
+            if self.current_chord_index < len(self.chord_queue):
+                current_chord = self.chord_queue[self.current_chord_index]
+                if played_chord.noteList == current_chord.noteList:
+                    # Calculer le temps écoulé
+                    end_time = time.time()
+                    time_taken = int((end_time - self.start_time) * 10)  # En dixièmes de seconde
+                    has_error = "True" if self.played_chords[self.current_chord_index] == -1 else "False"
+                    # Écrire dans le CSV
+                    self.log_to_csv(current_chord.shortname, time_taken, has_error)
+                    # Mettre à jour l’état
+                    if self.played_chords[self.current_chord_index] != -1:
+                        self.played_chords[self.current_chord_index] = 1
+                    self.current_chord_index += 1
+                    self.current_notes = []
+                    self.midi_reader.current_chord = None
+                    self.update_display()
+                else:
+                    self.played_chords[self.current_chord_index] = -1
         self.root.after(100, self.update_midi_reader)
 
+    def log_to_csv(self, requested_chord, time_taken, has_error):
+        """Écrit une ligne dans le fichier CSV."""
+        # Horodatage au format AAAAMMJJhhmmss.d
+        now = datetime.now()
+        timestamp = now.strftime("%Y%m%d%H%M%S") + f".{int(now.microsecond / 100000)}"
+        # Écrire dans le CSV
+        with open(self.csv_file, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([timestamp, requested_chord, time_taken, has_error])
+        print(f"Progression enregistrée : {timestamp}, {requested_chord}, {time_taken}, {has_error}")
+
     def update_display(self):
-        # Zone 1 : Afficher la file des accords
         for label in self.zone1_labels:
             label.destroy()
         self.zone1_labels = []
@@ -171,7 +180,7 @@ class TrainerWindow:
             label = ctk.CTkLabel(
                 master=self.zone1_frame,
                 text="Aucun accord chargé",
-                font=("Arial", 30),
+                font=self.text_font,
                 text_color="red",
                 anchor="center"
             )
@@ -185,7 +194,12 @@ class TrainerWindow:
         for i in range(start_index, end_index):
             chord = self.chord_queue[i]
             if i < self.current_chord_index:
-                color = "green" if self.played_chords[i] else "red"
+                if self.played_chords[i] == 1:
+                    color = "green"
+                elif self.played_chords[i] == -1:
+                    color = "red"
+                else:
+                    color = "white"
             elif i == self.current_chord_index:
                 color = "yellow"
             else:
@@ -194,7 +208,7 @@ class TrainerWindow:
             label = ctk.CTkLabel(
                 master=self.zone1_frame,
                 text=chord.shortname,
-                font=("Arial", 30),
+                font=self.text_font,
                 text_color=color,
                 width=100,
                 anchor="center"
@@ -202,38 +216,21 @@ class TrainerWindow:
             label.pack(side="left", padx=20)
             self.zone1_labels.append(label)
 
-        # Zone 2 : Afficher la formule de l'accord actuel
         if self.current_chord_index < len(self.chord_queue):
             current_chord = self.chord_queue[self.current_chord_index]
             self.zone2_label.configure(text=f"Formule : {current_chord.formula}")
+            self.zone2_label.update()
+            print(f"Affichage de l'accord demandé : {current_chord.ChordDiagramString}")
+            self.zone3_label.configure(text=current_chord.ChordDiagramString)
+            self.zone3_label.update()
+            # Démarrer le chronomètre pour cet accord
+            self.start_time = time.time()
         else:
             self.zone2_label.configure(text="Exercice terminé")
-
-        # Zone 3 : Afficher le diagramme de l'accord demandé
-        if self.current_chord_index < len(self.chord_queue):
-            current_chord = self.chord_queue[self.current_chord_index]
-            self.zone3_label.configure(text=current_chord.ChordDiagramString)
-            # Jouer l'accord demandé via event_queue
-            self.play_chord(current_chord)
-        else:
+            self.zone2_label.update()
             self.zone3_label.configure(text="")
+            self.zone3_label.update()
 
-        # Zone 4 : Afficher le diagramme de l'accord joué
         if not self.current_notes:
             self.zone4_label.configure(text="")
-
-    def play_chord(self, chord):
-        # Convertir les notes de l'accord en valeurs MIDI
-        note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-        root_note = note_names.index(chord.rootnote) + 60  # MIDI note pour C4 = 60
-        intervals = chord.formula
-        midi_notes = [root_note + interval for interval in intervals]
-
-        # Envoyer les événements à event_queue
-        for note in midi_notes:
-            self.midi_reader.event_queue.put(("note_on", note, 64))
-        self.root.after(1000, lambda: self.stop_chord(midi_notes))
-
-    def stop_chord(self, midi_notes):
-        for note in midi_notes:
-            self.midi_reader.event_queue.put(("note_off", note, 0))
+            self.zone4_label.update()
