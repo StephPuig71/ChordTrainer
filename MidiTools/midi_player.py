@@ -45,4 +45,5 @@ class MidiPlayer:
         self.running = False
         if self.thread:
             self.thread.join()
-        self.fs.delete()
+        if hasattr(self, 'fs'):  # Vérifie que fs existe avant de le supprimer
+            self.fs.delete()

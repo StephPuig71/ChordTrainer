@@ -6,11 +6,6 @@ import time
 from collections import deque
 from MidiTools.midi_player import MidiPlayer
 from MusicUtils.chords_analyser import ChordAnalyser
-from MusicUtils.chords_generator import ChordDictionnary, ChordDictionnaryGenerator
-
-# Générer le dictionnaire des accords une seule fois
-chord_dictionnary = ChordDictionnary()
-generator = ChordDictionnaryGenerator(chord_dictionnary)
 
 
 class MidiReader:
@@ -28,8 +23,13 @@ class MidiReader:
         self.active_notes = {}
         self.chords = []
         self.last_note_time = 0
-        self.current_chord = None  # Stocke l'accord en cours
+        self.current_chord = None
+        self.chord_dictionnary = None  # Ajouté
         self.start()
+
+    def set_chord_dictionnary(self, chord_dictionnary):
+        """Set the chord dictionary for analysis."""
+        self.chord_dictionnary = chord_dictionnary
 
     def start(self):
         """Start MIDI reading in a separate thread."""
@@ -46,32 +46,27 @@ class MidiReader:
         print(f"Listening for MIDI events on {device_name}...")
 
     def _read_midi(self):
-        """Read MIDI events, manage FIFO and detect chords."""
-        SIMULTANEITY_THRESHOLD = 200  # ms window for chord detection
-        CHORD_STABILIZATION_DELAY = 0.3  # seconds to wait after last note
+        SIMULTANEITY_THRESHOLD = 200
+        CHORD_STABILIZATION_DELAY = 0.3
         while self.running:
             if self.midi_input.poll():
                 midi_events = self.midi_input.read(10)
                 for event in midi_events:
                     status, note, velocity, _ = event[0]
                     timestamp = event[1]
-
-                    if status & 0xF0 == 0x90 and velocity > 0:  # Note On
+                    if status & 0xF0 == 0x90 and velocity > 0:
                         self.event_queue.put(("note_on", note, velocity))
                         self.active_notes[note] = timestamp
                         self.last_note_time = time.time()
-
-                    elif status & 0x80 or (status & 0xF0 == 0x90 and velocity == 0):  # Note Off
+                    elif status & 0x80 or (status & 0xF0 == 0x90 and velocity == 0):
                         self.event_queue.put(("note_off", note, 0))
                         if note in self.active_notes:
                             self.note_fifo.append(note)
                             print(f"Last 12 notes played: {list(self.note_fifo)}")
                             del self.active_notes[note]
-                            # Réinitialise l'accord en cours si toutes les notes sont relâchées
                             if not self.active_notes:
                                 self.current_chord = None
 
-            # Detect chord if stabilized and not yet detected
             current_time = time.time()
             current_size = len(self.active_notes)
             if (self.active_notes and 
@@ -82,11 +77,17 @@ class MidiReader:
                 if max(active_timestamps) - min(active_timestamps) <= SIMULTANEITY_THRESHOLD:
                     keysList = sorted(self.active_notes.keys())
                     self.chords.append(keysList)
-                    chord = ChordAnalyser.analyse(keysList, chord_dictionnary)
-                    #self.current_chord = tuple(chord)  # Stocke comme tuple
+                    if self.chord_dictionnary:  # Vérifie que le dictionnaire est défini
+                        chord = ChordAnalyser.analyse(keysList, self.chord_dictionnary)
+                        if chord:
+                            self.current_chord = chord
+                            print(f"Accord détecté : {chord.shortname}")
+                    else:
+                        print("Erreur : chord_dictionnary non défini")
 
             time.sleep(0.01)
 
+    # ... (start, stop, __del__ inchangés)
     def stop(self):
         """Stop the MIDI reader and player."""
         self.running = False
@@ -94,10 +95,11 @@ class MidiReader:
             self.thread.join()
         if self.midi_input:
             self.midi_input.close()
-        self.player.stop()
+        self.player.stop()  # Arrête le player avant de quitter pygame.midi
         pygame.midi.quit()
         pygame.quit()
 
     def __del__(self):
         """Ensure proper cleanup on object destruction."""
-        self.stop()
+        if self.running:  # Évite un double arrêt
+            self.stop()
